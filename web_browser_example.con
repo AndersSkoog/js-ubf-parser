@@ -1,0 +1,27 @@
++NAME("web_browser_example").
+
++VSN("ubf2.0").
+
++TYPES
+ok()        :: ok.
+error()     :: {error, ubfstring()}.
+secret()    :: {secret, ubfstring()}.
+pickPrize() :: {pick_prize, 1 | 2 | 3 | 4 | 5}.
+gameOver()  :: {error, "game over"}.
+
++STATE locked
+   secret() => {ok, "choose a number between 1-5 to get your prize"} & picking_prize;
+   secret() => {error, "incorrect password, access denied"} & locked.
+
++STATE picking_prize
+   pickPrize() => {ok, ubfstring()} & game_over;
+   {pick_prize, _} => {error, "Invalid choice, pick a number between 1-5"} & picking_prize.
+
++STATE game_over
+   secret() => gameOver() & game_over;
+   pickPrize() => gameOver() & game_over.
+
++ANYSTATE
+   info()        => string();
+   description() => string();
+   contract()    => term().
