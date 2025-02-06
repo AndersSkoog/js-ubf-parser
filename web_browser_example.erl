@@ -1,82 +1,55 @@
--module(web_browser_example_plugin).
+-module(web_browser_example).
 -behaviour(ubf_plugin_stateful).
 
 -include("ubf.hrl").
 
 -export([info/0, description/0,
          managerStart/1, managerRestart/2, managerRpc/2,
-         handlerStart/2, handlerRpc/4, handlerStop/3,
-         handlerEvent/1
-        ]).
+         handlerStart/2, handlerRpc/4, handlerStop/3]).
 
+%% Import needed modules
 -import(ubf_plugin_handler, [sendEvent/2, install_handler/2]).
--import(lists, [map/2]).
 
-%% NOTE the following two lines
+%% Define the prizes
+-define(PRIZES, #{
+    1 => "a brand new bike",
+    2 => "a vacation to the Bahamas",
+    3 => "a free dinner",
+    4 => "a mystery box",
+    5 => "a movie ticket"
+}).
 
--compile({parse_transform,contract_parser}).
--add_contract("./test/unit/test_plugin").
+%%% Plugin information
+info() -> "Simple Game Plugin".
 
-info() -> "I am a test server".
+description() -> "A simple game where you enter a secret code, pick a prize, and reach the end state.".
 
-description() -> "The test server is a ...
-        bla
-        bla
-        bla".
+%%% Manager Functions
+managerStart(_) -> {ok, manager_state}.  
+managerRestart(_,_) -> ok.  %% No restart logic needed  
+managerRpc(_, State) -> {{error, unknown_rpc}, State}.  %% No special manager RPCs  
 
-managerStart(_) -> {ok, myManagerState}.
+%%% Handler Functions
 
-managerRestart(_,_) -> ok. %% noop
+%% Start in locked state
+handlerStart(_, _ManagerPid) ->
+    {accept, locked, undefined}. 
 
-managerRpc(secret, State) ->
-    {{ok, welcomeToFTP}, State};
-managerRpc(_, State) ->
-    {{error, badPassword}, State}.
+%% Handling messages in different states
+handlerRpc(locked, {secret, "aladin"}, _State, _Env) ->
+    {{ok, "choose a number between 1-5 to get your prize"}, picking_prize, undefined};
+handlerRpc(locked, {secret, _WrongPassword}, State, _Env) ->
+    {{error, "incorrect password, access denied"}, locked, State};
 
-%% handlerStart(Args, ManagerPid) ->
-%%   {accept, State, InitialData}
+handlerRpc(picking_prize, {pick_prize, N}, _State, _Env) when N >= 1, N =< 5 ->
+    Prize = maps:get(N, ?PRIZES, "an unknown prize"),
+    {{ok, "you have won: " ++ Prize}, end_state, undefined};
+handlerRpc(picking_prize, _, State, _Env) ->
+    {{error, "Invalid choice, pick a number between 1-5"}, picking_prize, State};
 
-handlerStart(secret, _ManagerPid) ->
-    ack = install_handler(self(), fun handlerEvent/1),
-    {accept, yesOffWeGo, start, myInitailData0};
-handlerStart(_Other, _ManagerPid) ->
-    {reject, bad_password}.
+handlerRpc(end_state, _, State, _Env) ->
+    {{"game over"}, end_state, State}.
 
-handlerRpc(start, {logon, _}, State, _Env) ->
-    {ok, active, State};
-handlerRpc(active, ls, State, _Env) ->
-    {{files, [?S("a"), ?S("b")]}, active, State};
-handlerRpc(active, {callback, X}, State, _Manager) ->
-    sendEvent(self(), {callback, X}),
-    {callbackOnItsWay, active, State};
-handlerRpc(active, {get, _File}, State, _Env) ->
-    {{ok,(<<>>)}, active, State};
-handlerRpc(active, testAmbiguities, State, _Env) ->
-    {yes, funny, State};
-handlerRpc(funny, ?S(S), State, _Env) ->
-    io:format("Upcase ~p~n",[S]),
-    {?S(up_case(S)), funny, State};
-handlerRpc(funny, ?P(List), State, _Env) when is_list(List) ->
-    io:format("PropList ~p~n",[List]),
-    {?P(List), funny, State};
-handlerRpc(funny, List, State, _Env) when is_list(List) ->
-    io:format("Double ~p~n",[List]),
-    {map(fun(I) -> 2*I end, List), funny, State};
-handlerRpc(funny, stop, State, _Env) ->
-    {ack, start, State}.
-
-handlerStop(Pid, Reason, ManagerData) ->
-    io:format("Client stopped:~p ~p~n",[Pid, Reason]),
-    ManagerData.
-
-handlerEvent({callback, X}) ->
-    sendEvent(self(), {callback, X}),
-    fun handlerEvent/1.
-
-up_case(I) ->
-    map(fun to_upper/1 , I).
-
-to_upper(I) when I >= $a, I =< $z ->
-    I + $A - $a;
-to_upper(I) ->
-    I.
+%% Stopping the handler
+handlerStop(_Pid, _Reason, _ManagerData) ->
+    ok.

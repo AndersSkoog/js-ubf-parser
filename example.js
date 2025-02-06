@@ -6,8 +6,7 @@ const test_jsData = {
     bool: true,
     number: 123,
     string: "Hello",
-    list: [1, 2, 3],
-    tuple: {key: "value"}
+    list: [1, 2, 3]
 };
 
 const test_ubfMessage = parser.encode(test_jsData);
